@@ -3,7 +3,7 @@ from torch import nn
 import torchvision
 from transformers import AutoModel, AutoTokenizer
 from vncorenlp import VnCoreNLP
-
+import timm
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")  # cuda:0
 
@@ -17,19 +17,25 @@ class CNN_Encoder(nn.Module):
         super(CNN_Encoder, self).__init__()
         self.enc_image_size = encoded_image_size
         self.attention_method = attention_method
-
+        
         resnet = torchvision.models.resnet101(pretrained=True)  # pretrained ImageNet ResNet-101
 
         # Remove linear and pool layers (since we're not doing classification)
         # Specifically, Remove: AdaptiveAvgPool2d(output_size=(1, 1)), Linear(in_features=2048, out_features=1000, bias=True)]
         modules = list(resnet.children())[:-2]
         self.resnet = nn.Sequential(*modules)
+        
+        # effnet = timm.create_model('tf_efficientnet_b3', pretrained=True)
+        # modules = list(effnet.children())[:-5]
+        # self.effnet = nn.Sequential(*modules)
 
         if self.attention_method == "ByChannel":
             self.cnn1 = nn.Conv2d(in_channels=2048, out_channels=512, kernel_size=(1, 1), stride=(1, 1), bias=False)
             self.bn1 = nn.BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
             self.relu = nn.ReLU(inplace=True)
-
+        # self.conv = nn.Conv2d(384, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False)
+        # self.bn = nn.BatchNorm2d(2048)
+        # self.silu = nn.SiLU(inplace=True)
         # Resize image to fixed size to allow input images of variable size
         self.adaptive_pool = nn.AdaptiveAvgPool2d((encoded_image_size, encoded_image_size))
 
@@ -43,8 +49,12 @@ class CNN_Encoder(nn.Module):
         :return: encoded images [batch_size, encoded_image_size=14, encoded_image_size=14, 2048]
         """
         out = self.resnet(images)  # (batch_size, 2048, image_size/32, image_size/32)
+        # out = self.effnet(images)
         if self.attention_method == "ByChannel":  # [batch_size, 2048, 8, 8] -> # [batch_size, 512, 8, 8]
             out = self.relu(self.bn1(self.cnn1(out)))
+        # out = self.conv(out)
+        # out = self.bn(out)
+        # out = self.silu(out)
         out = self.adaptive_pool(out)  # [batch_size, 2048/512, 8, 8] -> [batch_size, 2048/512, 14, 14]
         out = out.permute(0, 2, 3, 1)
         return out
@@ -103,7 +113,7 @@ class DecoderWithAttention(nn.Module):
     Decoder.
     """
 
-    def __init__(self, attention_dim, embed_dim, decoder_dim, vocab_size, encoder_dim=2048, dropout=0.5, use_bert=True):
+    def __init__(self, attention_dim, embed_dim, decoder_dim, vocab_size, encoder_dim=2048, dropout=0.5, use_bert=False):
         """
         :param attention_dim: size of attention network
         :param embed_dim: embedding size
@@ -122,7 +132,7 @@ class DecoderWithAttention(nn.Module):
         self.dropout = dropout
 
         self.attention = Attention(encoder_dim, decoder_dim, attention_dim)  # attention network
-        # self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)  # embedding layer
+        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)  # embedding layer
         self.dropout = nn.Dropout(p=self.dropout)
         self.lstm = nn.LSTMCell(embed_dim + encoder_dim, decoder_dim, bias=True)  # decoding LSTMCell
         self.init_h = nn.Linear(encoder_dim, decoder_dim)  # linear layer to find initial hidden state of LSTMCell
@@ -131,10 +141,10 @@ class DecoderWithAttention(nn.Module):
         self.sigmoid = nn.Sigmoid()
         self.fc = nn.Linear(decoder_dim, vocab_size)  # linear layer to find scores over vocabulary
         self.init_weights()  # initialize some layers with the uniform distribution
-        # self.fine_tune_embeddings()
+        self.fine_tune_embeddings()
         
-        self.bert = AutoModel.from_pretrained('vinai/phobert-base').to(device)
-        self.bert.eval()
+        # self.bert = AutoModel.from_pretrained('vinai/phobert-base').to(device)
+        # self.bert.eval()
 
         # self.use_bert = use_bert
 
@@ -198,13 +208,8 @@ class DecoderWithAttention(nn.Module):
         caption_lengths, sort_ind = caption_lengths.squeeze(1).sort(dim=0, descending=True)
         encoder_out = encoder_out[sort_ind]
         encoded_captions = encoded_captions[sort_ind]
-        # if self.use_bert:
-        with torch.no_grad():
-            features = self.bert(encoded_captions)
-        embeddings = features['last_hidden_state']
-        # else:
-            # Embedding
-        #     embeddings = self.embedding(encoded_captions)  # [batch_size, max_caption_length=52, embed_dim]
+        # Embedding
+        embeddings = self.embedding(encoded_captions)  # [batch_size, max_caption_length=52, embed_dim]
 
         # Initialize LSTM state
         h, c = self.init_hidden_state(encoder_out)  # [batch_size, decoder_dim]

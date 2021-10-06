@@ -33,8 +33,8 @@ def caption_image_beam_search(args, encoder, decoder, image_path, word_map):
     """
     k = args.beam_size
     Caption_End = False
-    # vocab_size = len(word_map)
-    vocab_size = 64000
+    vocab_size = len(word_map)
+    # vocab_size = 64000
 
     # Read image and process
     try:
@@ -78,7 +78,7 @@ def caption_image_beam_search(args, encoder, decoder, image_path, word_map):
 
     # Tensor to store top k sequences; now they're just <start>
     # seqs = torch.LongTensor([[word_map['<SOS>']]] * k).to(device)  # (k, 1)
-    seqs = torch.LongTensor([[0]] * k).to(device)  # (k, 1)
+    seqs = torch.LongTensor([[word_map['<SOS>']]] * k).to(device)  # (k, 1)
     # Tensor to store top k sequences' scores; now they're just 0
     top_k_scores = torch.zeros(k, 1).to(device)  # (k, 1)
     # Tensor to store top k sequences' alphas; now they're just 1s
@@ -95,8 +95,7 @@ def caption_image_beam_search(args, encoder, decoder, image_path, word_map):
     # s is a number less than or equal to k, because sequences are removed from this process once they hit <end>
     while True:
         if args.decoder_mode == "lstm":
-            features = decoder.bert(k_prev_words)
-            embeddings = features['last_hidden_state'].squeeze(1)
+            embeddings = decoder.embedding(k_prev_words).squeeze(1)  # (s, embed_dim)
             awe, alpha = decoder.attention(encoder_out, h)  # (s, encoder_dim), (s, num_pixels)
             alpha = alpha.view(-1, enc_image_size, enc_image_size).unsqueeze(1)  # (s, 1, enc_image_size, enc_image_size)
             gate = decoder.sigmoid(decoder.f_beta(h))  # gating scalar, (s, encoder_dim)
@@ -119,7 +118,6 @@ def caption_image_beam_search(args, encoder, decoder, image_path, word_map):
             alpha = alpha[:, 0, step-1, :].view(k, 1, enc_image_size, enc_image_size)  # [s, 1, enc_image_size, enc_image_size]
          
         scores = F.log_softmax(scores, dim=1)
-        print(scores)
         # Add
         scores = top_k_scores.expand_as(scores) + scores  # (s, vocab_size)
         # For the first step, all k points will have the same scores (since same k previous words, h, c)
@@ -128,7 +126,7 @@ def caption_image_beam_search(args, encoder, decoder, image_path, word_map):
         else:
             # Unroll and find top scores, and their unrolled indices
             top_k_scores, top_k_words = scores.view(-1).topk(k, 0, True, True)  # (s)
-        print(top_k_words) 
+        
         # Convert unrolled indices to actual indices of scores
         prev_word_inds = top_k_words // vocab_size  # (s)
         next_word_inds = top_k_words % vocab_size  # (s)
@@ -139,7 +137,7 @@ def caption_image_beam_search(args, encoder, decoder, image_path, word_map):
 
         # Which sequences are incomplete (didn't reach <end>)?
         incomplete_inds = [ind for ind, next_word in enumerate(next_word_inds) if
-                           next_word != 2]
+                           next_word != word_map['<EOS>']]
         complete_inds = list(set(range(len(next_word_inds))) - set(incomplete_inds))
     
         # Set aside complete sequences
@@ -251,9 +249,10 @@ if __name__ == '__main__':
         word_map = json.load(j)
     rev_word_map = {v: k for k, v in word_map.items()}  # ix2word
     """
-    convert = LabelConvert(vocab_file='util/vocab_tachtu.txt')
+    convert = LabelConvert(vocab_file='util/vocab_coco.txt')
     word_map = convert.vocab_mapper
     rev_word_map = convert.vocab_inverse_mapper
+    print('load word map')
     """
     # Encode, decode with attention and beam search
     if os.path.isdir(args.img):
@@ -281,19 +280,18 @@ if __name__ == '__main__':
         # Visualize caption and attention of best sequence
         visualize_att(args.img, seq, alphas, rev_word_map, path, args.smooth)
     """
-    with open('vlsp_dataset/test_captions/sample_submission.json', 'r') as f:
+    with open('dataset/vlsp_test/sample_submission.json', 'r') as f:
         datas = json.load(f)
         all_result = []
         for idx, data in enumerate(datas):
             each_result = dict()
             imgname = data['id']
-            imgpath = os.path.join('vlsp_dataset/test_captions/images_public_test', imgname)
+            imgpath = os.path.join('dataset/vlsp_test/images_public_test', imgname)
             print(imgpath)
             with torch.no_grad():
                 seq, alphas = caption_image_beam_search(args, encoder, decoder, imgpath, word_map)
             print(seq)
             
-            """
             words = [rev_word_map[ind] for ind in seq]
             print(words)
             words = words[1:-1]
@@ -311,7 +309,7 @@ if __name__ == '__main__':
             each_result['id'] = imgname
             each_result['captions'] = result
             all_result.append(each_result)
-            """
-            break
-    # with open('vlsp_dataset/test_captions/tachtu_resnet101_transformer.json', 'w', encoding='utf-8') as fp:
+            
+            
+    # with open('dataset/vlsp_test/best_current.json', 'w', encoding='utf-8') as fp:
     #     json.dump(all_result, fp, ensure_ascii=False)

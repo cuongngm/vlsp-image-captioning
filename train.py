@@ -9,7 +9,7 @@ from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence
 from models import *
 from transformer import *
-from datasets import *
+# from datasets import *
 from utils import *
 from nltk.translate.bleu_score import corpus_bleu
 import argparse
@@ -46,8 +46,8 @@ def train(args, train_loader, encoder, decoder, criterion, encoder_optimizer, de
     # Batches
     for i, (imgs, caps, caplens) in enumerate(train_loader):
         data_time.update(time.time() - start)
-        # caps = convert.encode(caps)
-        # caps = caps.permute(1, 0)
+        caps = convert.encode(caps)
+        caps = caps.permute(1, 0)
         caplens = caplens.unsqueeze(1)
 
         # Move to GPU, if available
@@ -146,8 +146,8 @@ def validate(args, val_loader, encoder, decoder, criterion, convert):
     with torch.no_grad():
         # Batches
         for i, (imgs, caps, caplens) in enumerate(val_loader):
-            # caps = convert.encode(caps)
-            # caps = caps.permute(1, 0)
+            caps = convert.encode(caps)
+            caps = caps.permute(1, 0)
             caplens = caplens.unsqueeze(1)
             allcaps = caps.unsqueeze(1)
             """
@@ -206,8 +206,8 @@ def validate(args, val_loader, encoder, decoder, criterion, convert):
             for j in range(allcaps.shape[0]):
                 img_caps = allcaps[j].tolist()
                 img_captions = list(
-                    map(lambda c: [w for w in c if w not in {0, 1}],
-                        img_caps))  # remove <start> and pads
+                    map(lambda c: [w for w in c if w not in {convert.SOS, convert.PAD}],
+                        img_caps))  # remove <start> and pad
                 references.append(img_captions)
 
             # Hypotheses
@@ -230,9 +230,9 @@ def validate(args, val_loader, encoder, decoder, criterion, convert):
     # weights = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0,)
     # metrics["bleu3"] = corpus_bleu(references, hypotheses, weights)
     # metrics["bleu4"] = corpus_bleu(references, hypotheses)
-    for idxx in range(20):
-        print('ref', references[idxx])
-        print('hypotheses', hypotheses[idxx])
+    # for idxx in range(20):
+    #     print('ref', references[idxx])
+    #     print('hypotheses', hypotheses[idxx])
     # Calculate BLEU1~4, METEOR, ROUGE_L, CIDEr scores
     metrics = get_eval_score(references, hypotheses)
 
@@ -301,10 +301,10 @@ if __name__ == '__main__':
     with open(word_map_file, 'r') as j:
         word_map = json.load(j)
     """
-    convert = LabelConvert(vocab_file='util/vocab_tachtu.txt')
-    # print('vocab size', convert.num_class)
-    tokenizer = AutoTokenizer.from_pretrained('vinai/phobert-base')
-    print('vocab_size', tokenizer.vocab_size)
+    convert = LabelConvert(vocab_file='util/vocab_coco.txt')
+    print('vocab size', convert.num_class)
+    # tokenizer = AutoTokenizer.from_pretrained('vinai/phobert-base')
+    # print('vocab_size', tokenizer.vocab_size)
     # Initialize / load checkpoint
     if args.checkpoint is None:
         encoder = CNN_Encoder(attention_method=args.attention_method)
@@ -317,10 +317,10 @@ if __name__ == '__main__':
             decoder = DecoderWithAttention(attention_dim=args.attention_dim,
                                            embed_dim=args.emb_dim,
                                            decoder_dim=args.decoder_dim,
-                                           vocab_size=tokenizer.vocab_size,
+                                           vocab_size=convert.num_class,
                                            dropout=args.dropout)
         elif args.decoder_mode == "transformer":
-            decoder = Transformer(vocab_size=tokenizer.vocab_size, embed_dim=args.emb_dim, encoder_layers=args.encoder_layers,
+            decoder = Transformer(vocab_size=convert.num_class, embed_dim=args.emb_dim, encoder_layers=args.encoder_layers,
                                   decoder_layers=args.decoder_layers, dropout=args.dropout,
                                   attention_method=args.attention_method, n_heads=args.n_heads)
 
@@ -399,7 +399,7 @@ if __name__ == '__main__':
         CaptionDataset(args.data_folder, args.data_name, 'VAL', transform=transforms.Compose([normalize])),
         batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True)
     """
-    train_loader = CaptioningDataLoader(data_dir='/data/cuongnm1/dataset/vlsp/train_captions', anns_path='/data/cuongnm1/dataset/vlsp/train_captions.json', batch_size=args.batch_size, validation_split=0.1)
+    train_loader = CaptioningDataLoader(data_dir='dataset/vlsp_train/images_train', anns_path='dataset/vlsp_train/train_captions.json', batch_size=args.batch_size, validation_split=0.1)
     val_loader = train_loader.split_validation()
     print('load successfull dataset, {} train data, {} validate data'.format(len(train_loader) * args.batch_size, len(val_loader) * args.batch_size))
     # Epochs

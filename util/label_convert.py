@@ -23,7 +23,7 @@ class LabelConvert:
         self.UNK = self.vocab_mapper['<UNK>']
         self.num_class = len(self.vocab) + 4
         self.max_length = max_length
-        self.rdrsegmenter = VnCoreNLP("tachtu/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx500m')
+        # self.rdrsegmenter = VnCoreNLP("tachtu/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx500m')
 
     def encode(self, text):
         """ convert text to label index, add <SOS>, <EOS>, and do max_len padding
@@ -36,8 +36,8 @@ class LabelConvert:
         if isinstance(text, str):
             text = text.lower()
             text = text.translate(table)
-            words = self.rdrsegmenter.tokenize(text)[0]
-            # words = text.split(' ')
+            # words = self.rdrsegmenter.tokenize(text)[0]
+            words = text.split(' ')
             text = [self.vocab_mapper[item] if item in self.vocab else self.vocab_mapper['<UNK>'] for item in words]
         elif isinstance(text, collections.Iterable):
             text = [self.encode(s) for s in text]

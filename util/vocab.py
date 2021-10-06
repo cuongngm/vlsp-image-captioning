@@ -6,7 +6,7 @@ from vncorenlp import VnCoreNLP
 rdrsegmenter = VnCoreNLP("../tachtu/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx500m')
 word_fred = Counter()
 table = str.maketrans(dict.fromkeys(string.punctuation))
-with open('/data/cuongnm1/dataset/vlsp/train_captions.json', 'r') as f:
+with open('../dataset/vlsp_train/train_captions.json', 'r') as f:
     all_data = json.load(f)
     for data in all_data:
         labels = data['captions'].split('\n')
@@ -18,8 +18,9 @@ with open('/data/cuongnm1/dataset/vlsp/train_captions.json', 'r') as f:
             for word in label:
                 # if word.isalpha():
                 word_fred.update([word])
-word_vocab = [w for w in word_fred.keys() if word_fred[w] > 1]
-shuffle(word_vocab)
+word_vocab = [w for w in word_fred.keys()]
+print(len(word_vocab))
+# shuffle(word_vocab)
 with open('vocab_tachtu.txt', 'w') as file:
     for word in word_vocab:
         file.write(word + '\n')
