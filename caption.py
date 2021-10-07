@@ -311,5 +311,5 @@ if __name__ == '__main__':
             all_result.append(each_result)
             
             
-    # with open('dataset/vlsp_test/best_current.json', 'w', encoding='utf-8') as fp:
-    #     json.dump(all_result, fp, ensure_ascii=False)
+    with open('dataset/vlsp_test/current.json', 'w', encoding='utf-8') as fp:
+        json.dump(all_result, fp, ensure_ascii=False)
