@@ -1,23 +1,15 @@
-#!/usr/bin/env python3
-
 import os, time
 import torch
 import torch.nn.functional as F
 import numpy as np
 import json
 import torchvision.transforms as transforms
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import skimage.transform
 import argparse
-# from scipy.misc import imread, imresize
 import imageio
 import cv2
 from PIL import Image, ImageFile
 from util.label_convert import LabelConvert
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-
-# import transformer, models
 
 
 def caption_image_beam_search(args, encoder, decoder, image_path, word_map):
@@ -89,7 +81,7 @@ def caption_image_beam_search(args, encoder, decoder, image_path, word_map):
     complete_seqs_scores = list()
 
     # Start decoding
-    step     = 1
+    step = 1
     if args.decoder_mode == "lstm":
         h, c = decoder.init_hidden_state(encoder_out)
     # s is a number less than or equal to k, because sequences are removed from this process once they hit <end>
@@ -176,46 +168,6 @@ def caption_image_beam_search(args, encoder, decoder, image_path, word_map):
     return seq, alphas
 
 
-def visualize_att(image_path, seq, alphas, rev_word_map, path, smooth=True):
-    """
-    Visualizes caption with weights at every word.
-    Adapted from paper authors' repo: https://github.com/kelvinxu/arctic-captions/blob/master/alpha_visualization.ipynb
-
-    :param image_path: path to image that has been captioned
-    :param seq: caption
-    :param alphas: weights
-    :param rev_word_map: reverse word mapping, i.e. ix2word
-    :param smooth: smooth weights?
-    """
-    image = Image.open(image_path)
-    image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
-
-    words = [rev_word_map[ind] for ind in seq]
-    print(words)
-
-    for t in range(len(words)):
-        if t > 50:
-            break
-        plt.subplot(np.ceil(len(words) / 5.), 5, t + 1)
-
-        plt.text(0, 1, '%s' % (words[t]), color='black', backgroundcolor='white', fontsize=12)
-        plt.imshow(image)
-        current_alpha = alphas[t, :]
-        if smooth:
-            alpha = skimage.transform.pyramid_expand(current_alpha.numpy(), upscale=24, sigma=8)
-        else:
-            alpha = skimage.transform.resize(current_alpha.numpy(), [14 * 24, 14 * 24])
-        if t == 0:
-            plt.imshow(alpha, alpha=0)
-        else:
-            plt.imshow(alpha, alpha=0.8)
-        plt.set_cmap(cm.Greys_r)
-        plt.axis('off')
-    print(path)
-    plt.savefig(path)
-    plt.show()
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Image_Captioning')
     parser.add_argument('--img', '-i', default="./dataset/val2014/COCO_val2014_000000581886.jpg", help='path to image, file or folder')
@@ -229,8 +181,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # transformer.device = torch.device("cpu")
-    # models.device = torch.device("cpu")
     print(device)
 
     # Load model
@@ -243,43 +193,12 @@ if __name__ == '__main__':
     encoder.eval()
     # print(encoder)
     # print(decoder)
-    """
-    # Load word map (word2ix)
-    with open(args.word_map, 'r') as j:
-        word_map = json.load(j)
-    rev_word_map = {v: k for k, v in word_map.items()}  # ix2word
-    """
+
     convert = LabelConvert(vocab_file='util/vocab_coco.txt')
     word_map = convert.vocab_mapper
     rev_word_map = convert.vocab_inverse_mapper
-    print('load word map')
-    """
-    # Encode, decode with attention and beam search
-    if os.path.isdir(args.img):
-        for file in os.listdir(args.img):
-            file = os.path.join(args.img, file)
-            with torch.no_grad():
-                seq, alphas = caption_image_beam_search(args, encoder, decoder, file, word_map)
-                alphas = torch.FloatTensor(alphas)
+    print('load word map success!!')
 
-            if not (os.path.exists(args.save_img_dir) and os.path.isdir(args.save_img_dir)):
-                os.makedirs(args.save_img_dir)
-            timestamp = str(int(time.time()))
-            path = args.save_img_dir + "/" + timestamp + ".png"
-            # Visualize caption and attention of best sequence
-            visualize_att(file, seq, alphas, rev_word_map, path, args.smooth)
-    else:
-        with torch.no_grad():
-            seq, alphas = caption_image_beam_search(args, encoder, decoder, args.img, word_map)
-            alphas = torch.FloatTensor(alphas)
-
-        if not (os.path.exists(args.save_img_dir) and os.path.isdir(args.save_img_dir)):
-            os.makedirs(args.save_img_dir)
-        timestamp = str(int(time.time()))
-        path = args.save_img_dir + "/" + timestamp + ".png"
-        # Visualize caption and attention of best sequence
-        visualize_att(args.img, seq, alphas, rev_word_map, path, args.smooth)
-    """
     with open('dataset/vlsp_test/sample_submission.json', 'r') as f:
         datas = json.load(f)
         all_result = []
@@ -309,7 +228,6 @@ if __name__ == '__main__':
             each_result['id'] = imgname
             each_result['captions'] = result
             all_result.append(each_result)
-            
-            
-    with open('dataset/vlsp_test/current.json', 'w', encoding='utf-8') as fp:
+
+    with open('dataset/vlsp_test/results.json', 'w', encoding='utf-8') as fp:
         json.dump(all_result, fp, ensure_ascii=False)

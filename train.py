@@ -1,20 +1,13 @@
-#!/usr/bin/env python3
-
 import time
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
 import torchvision.transforms as transforms
-from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence
 from models import *
 from transformer import *
-# from datasets import *
 from utils import *
-from nltk.translate.bleu_score import corpus_bleu
 import argparse
-import codecs
-import numpy as np
 from util.label_convert import LabelConvert
 from data_loader.data_loaders import CaptioningDataLoader
 from transformers import AutoTokenizer
@@ -116,7 +109,9 @@ def train(args, train_loader, encoder, decoder, criterion, encoder_optimizer, de
         batch_time.update(time.time() - start)
         start = time.time()
         if i % args.print_freq == 0:
-            print("Epoch: {}/{} step: {}/{} Loss: {} AVG_Loss: {} Top-5 Accuracy: {} Batch_time: {}s".format(epoch+1, args.epochs, i+1, len(train_loader), losses.val, losses.avg, top5accs.val, batch_time.val))
+            print("Epoch: {}/{} step: {}/{} Loss: {} AVG_Loss: {} Top-5 Accuracy: {} Batch_time: {}s".
+                  format(epoch+1, args.epochs, i+1, len(train_loader), losses.val,
+                         losses.avg, top5accs.val, batch_time.val))
 
 
 def validate(args, val_loader, encoder, decoder, criterion, convert):
@@ -221,18 +216,6 @@ def validate(args, val_loader, encoder, decoder, criterion, convert):
 
             assert len(references) == len(hypotheses)
 
-    # Calculate BLEU-1~4 scores
-    # metrics = {}
-    # weights = (1.0 / 1.0,)
-    # metrics["bleu1"] = corpus_bleu(references, hypotheses, weights)
-    # weights = (1.0/2.0, 1.0/2.0,)
-    # metrics["bleu2"] = corpus_bleu(references, hypotheses, weights)
-    # weights = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0,)
-    # metrics["bleu3"] = corpus_bleu(references, hypotheses, weights)
-    # metrics["bleu4"] = corpus_bleu(references, hypotheses)
-    # for idxx in range(20):
-    #     print('ref', references[idxx])
-    #     print('hypotheses', hypotheses[idxx])
     # Calculate BLEU1~4, METEOR, ROUGE_L, CIDEr scores
     metrics = get_eval_score(references, hypotheses)
 
@@ -246,10 +229,6 @@ def validate(args, val_loader, encoder, decoder, criterion, convert):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Image_Captioning')
     # Data parameters
-    parser.add_argument('--data_folder', default="./dataset/generated_data",
-                        help='folder with data files saved by create_input_files.py.')
-    parser.add_argument('--data_name', default="coco_5_cap_per_img_5_min_word_freq",
-                        help='base name shared by data files.')
     # Model parameters
     parser.add_argument('--emb_dim', type=int, default=768, help='dimension of word embeddings.')
     parser.add_argument('--attention_dim', type=int, default=512, help='dimension of attention linear layers.')
@@ -295,12 +274,7 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")  # sets device for model and PyTorch tensors
     cudnn.benchmark = True  # set to true only if inputs to model are fixed size; otherwise lot of computational overhead
     print(device)
-    """
-    # Read word map
-    word_map_file = os.path.join(args.data_folder, 'WORDMAP_' + args.data_name + '.json')
-    with open(word_map_file, 'r') as j:
-        word_map = json.load(j)
-    """
+
     convert = LabelConvert(vocab_file='util/vocab_coco.txt')
     print('vocab size', convert.num_class)
     # tokenizer = AutoTokenizer.from_pretrained('vinai/phobert-base')
@@ -326,32 +300,6 @@ if __name__ == '__main__':
 
         decoder_optimizer = torch.optim.Adam(params=filter(lambda p: p.requires_grad, decoder.parameters()),
                                              lr=args.decoder_lr)
-
-        # load pre-trained word embedding
-        if args.embedding_path is not None:
-            all_word_embeds = {}
-            for i, line in enumerate(codecs.open(args.embedding_path, 'r', 'utf-8')):
-                s = line.strip().split()
-                all_word_embeds[s[0]] = np.array([float(i) for i in s[1:]])
-
-            # change emb_dim
-            args.emb_dim = list(all_word_embeds.values())[-1].size
-            word_embeds = np.random.uniform(-np.sqrt(0.06), np.sqrt(0.06), (len(word_map), args.emb_dim))
-            for w in word_map:
-                if w in all_word_embeds:
-                    word_embeds[word_map[w]] = all_word_embeds[w]
-                elif w.lower() in all_word_embeds:
-                    word_embeds[word_map[w]] = all_word_embeds[w.lower()]
-                else:
-                    # <pad> <start> <end> <unk>
-                    embedding_i = torch.ones(1, args.emb_dim)
-                    torch.nn.init.xavier_uniform_(embedding_i)
-                    word_embeds[word_map[w]] = embedding_i
-
-            word_embeds = torch.FloatTensor(word_embeds).to(device)
-            decoder.load_pretrained_embeddings(word_embeds)
-            decoder.fine_tune_embeddings(args.fine_tune_embedding)
-            print('Loaded {} pre-trained word embeddings.'.format(len(word_embeds)))
 
     else:
         checkpoint = torch.load(args.checkpoint, map_location=str(device))
@@ -387,21 +335,13 @@ if __name__ == '__main__':
 
     # Custom dataloaders
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    # normalize = transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
 
-    # pin_memory: If True, the data loader will copy Tensors into CUDA pinned memory before returning them.
-    # If your data elements are a custom type, or your collate_fn returns a batch that is a custom type.
-    """
-    train_loader = torch.utils.data.DataLoader(
-        CaptionDataset(args.data_folder, args.data_name, 'TRAIN', transform=transforms.Compose([normalize])),
-        batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True)
-    val_loader = torch.utils.data.DataLoader(
-        CaptionDataset(args.data_folder, args.data_name, 'VAL', transform=transforms.Compose([normalize])),
-        batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True)
-    """
-    train_loader = CaptioningDataLoader(data_dir='dataset/vlsp_train/images_train', anns_path='dataset/vlsp_train/train_captions.json', batch_size=args.batch_size, validation_split=0.1)
+    train_loader = CaptioningDataLoader(data_dir='dataset/vlsp_train/images_train',
+                                        anns_path='dataset/vlsp_train/train_captions.json',
+                                        batch_size=args.batch_size, validation_split=0.1)
     val_loader = train_loader.split_validation()
-    print('load successfull dataset, {} train data, {} validate data'.format(len(train_loader) * args.batch_size, len(val_loader) * args.batch_size))
+    print('load successfull dataset, {} train data, {} validate data'.format(len(train_loader) * args.batch_size,
+                                                                             len(val_loader) * args.batch_size))
     # Epochs
     for epoch in range(start_epoch, args.epochs):
 
@@ -421,7 +361,8 @@ if __name__ == '__main__':
               encoder_optimizer=encoder_optimizer, decoder_optimizer=decoder_optimizer, epoch=epoch, convert=convert)
 
         # One epoch's validation
-        metrics = validate(args, val_loader=val_loader, encoder=encoder, decoder=decoder, criterion=criterion, convert=convert)
+        metrics = validate(args, val_loader=val_loader, encoder=encoder, decoder=decoder,
+                           criterion=criterion, convert=convert)
         recent_bleu4 = metrics["Bleu_4"]
 
         # Check if there was an improvement

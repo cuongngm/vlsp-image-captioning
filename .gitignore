@@ -108,7 +108,8 @@ dataset/
 weight/
 vlsp_dataset/
 eval_func/meteor/data
-
+util/vocab_tachtu.txt
+*.ipynb
 # editor, os cache directory
 .vscode/
 .idea/

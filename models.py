@@ -1,8 +1,6 @@
 import torch
 from torch import nn
 import torchvision
-from transformers import AutoModel, AutoTokenizer
-from vncorenlp import VnCoreNLP
 import timm
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")  # cuda:0
@@ -17,28 +15,20 @@ class CNN_Encoder(nn.Module):
         super(CNN_Encoder, self).__init__()
         self.enc_image_size = encoded_image_size
         self.attention_method = attention_method
-        
-        resnet = torchvision.models.resnet101(pretrained=True)  # pretrained ImageNet ResNet-101
-
-        # Remove linear and pool layers (since we're not doing classification)
-        # Specifically, Remove: AdaptiveAvgPool2d(output_size=(1, 1)), Linear(in_features=2048, out_features=1000, bias=True)]
+        resnet = torchvision.models.resnet101(pretrained=True)  # pretrained ImageNet ResNet-10
         modules = list(resnet.children())[:-2]
         self.resnet = nn.Sequential(*modules)
         
-        # effnet = timm.create_model('tf_efficientnet_b3', pretrained=True)
-        # modules = list(effnet.children())[:-5]
+        # effnet = timm.create_model('tf_efficientnet_b7_ns', pretrained=True)
+        # modules = list(effnet.children())[:-2]
         # self.effnet = nn.Sequential(*modules)
 
         if self.attention_method == "ByChannel":
             self.cnn1 = nn.Conv2d(in_channels=2048, out_channels=512, kernel_size=(1, 1), stride=(1, 1), bias=False)
             self.bn1 = nn.BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
             self.relu = nn.ReLU(inplace=True)
-        # self.conv = nn.Conv2d(384, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False)
-        # self.bn = nn.BatchNorm2d(2048)
-        # self.silu = nn.SiLU(inplace=True)
         # Resize image to fixed size to allow input images of variable size
         self.adaptive_pool = nn.AdaptiveAvgPool2d((encoded_image_size, encoded_image_size))
-
         self.fine_tune()
 
     def forward(self, images):
@@ -52,9 +42,6 @@ class CNN_Encoder(nn.Module):
         # out = self.effnet(images)
         if self.attention_method == "ByChannel":  # [batch_size, 2048, 8, 8] -> # [batch_size, 512, 8, 8]
             out = self.relu(self.bn1(self.cnn1(out)))
-        # out = self.conv(out)
-        # out = self.bn(out)
-        # out = self.silu(out)
         out = self.adaptive_pool(out)  # [batch_size, 2048/512, 8, 8] -> [batch_size, 2048/512, 14, 14]
         out = out.permute(0, 2, 3, 1)
         return out
@@ -113,7 +100,7 @@ class DecoderWithAttention(nn.Module):
     Decoder.
     """
 
-    def __init__(self, attention_dim, embed_dim, decoder_dim, vocab_size, encoder_dim=2048, dropout=0.5, use_bert=False):
+    def __init__(self, attention_dim, embed_dim, decoder_dim, vocab_size, encoder_dim=2048, dropout=0.5):
         """
         :param attention_dim: size of attention network
         :param embed_dim: embedding size
@@ -142,12 +129,6 @@ class DecoderWithAttention(nn.Module):
         self.fc = nn.Linear(decoder_dim, vocab_size)  # linear layer to find scores over vocabulary
         self.init_weights()  # initialize some layers with the uniform distribution
         self.fine_tune_embeddings()
-        
-        # self.bert = AutoModel.from_pretrained('vinai/phobert-base').to(device)
-        # self.bert.eval()
-
-        # self.use_bert = use_bert
-
 
     def init_weights(self):
         """

@@ -7,6 +7,7 @@ from transformers import AutoTokenizer
 
 
 class AlignCollate:
+    # if use phobert embedding
     def __init__(self, max_length=50):
         self.tokenizer = AutoTokenizer.from_pretrained('vinai/phobert-base')
         self.max_length = max_length
@@ -15,6 +16,7 @@ class AlignCollate:
         new_img = []
         new_label = []
         new_len = []
+        result = []
         for data in batch:
             label = data['label']
             input_ids = [1] * (self.max_length + 2)
@@ -24,7 +26,6 @@ class AlignCollate:
             new_img.append(data['img'])
             new_label.append(input_ids)
             new_len.append(data['len'])
-        result = []
         result.append(torch.stack(new_img))
         result.append(torch.stack(new_label))
         result.append(torch.tensor(new_len))
@@ -35,7 +36,7 @@ class BaseDataLoader(DataLoader):
     """
     Base class for all data loaders
     """
-    def __init__(self, dataset, batch_size, shuffle, validation_split, num_workers):
+    def __init__(self, dataset, batch_size, shuffle, validation_split, num_workers, collate_fn=default_collate):
         self.validation_split = validation_split
         self.shuffle = shuffle
 
@@ -48,7 +49,8 @@ class BaseDataLoader(DataLoader):
             'dataset': dataset,
             'batch_size': batch_size,
             'shuffle': self.shuffle,
-            'num_workers': num_workers
+            'num_workers': num_workers,
+            'collate_fn': default_collate
         }
         super().__init__(sampler=self.sampler, **self.init_kwargs)
 

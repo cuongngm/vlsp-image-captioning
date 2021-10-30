@@ -1,7 +1,6 @@
 import collections
 import torch
 import string
-from vncorenlp import VnCoreNLP
 
 
 class LabelConvert:
@@ -23,7 +22,7 @@ class LabelConvert:
         self.UNK = self.vocab_mapper['<UNK>']
         self.num_class = len(self.vocab) + 4
         self.max_length = max_length
-        # self.rdrsegmenter = VnCoreNLP("tachtu/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx500m')
+        # self.rdrsegmenter = VnCoreNLP("word_seg/VnCoreNLP-1.1.1.jar", annotators="wseg", max_heap_size='-Xmx500m')
 
     def encode(self, text):
         """ convert text to label index, add <SOS>, <EOS>, and do max_len padding

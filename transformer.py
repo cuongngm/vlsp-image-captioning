@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 import numpy as np
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 channel_number = 512
 
